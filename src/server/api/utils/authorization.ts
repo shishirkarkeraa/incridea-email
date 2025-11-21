@@ -1,6 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+
 import { TRPCError } from "@trpc/server";
 
 import type { AuthorizedUser } from "@prisma/client";
