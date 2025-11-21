@@ -1,7 +1,11 @@
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-argument */
+/* eslint-disable @typescript-eslint/no-unsafe-call */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 "use client";
 
 import Image from "next/image";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 
 import { api } from "~/trpc/react";
 import type { RouterInputs, RouterOutputs } from "~/trpc/react";
@@ -21,64 +25,139 @@ type AttachmentPayload = {
 type TemplateOption = RouterOutputs["templates"]["list"][number];
 type EmailSendPayload = Omit<RouterInputs["email"]["send"], "password">;
 
-const splitAddresses = (value: string) =>
-  value
-    .split(",")
-    .map((item) => item.trim())
-    .filter((item) => item.length > 0);
-
-const formatList = (items: string[]) => (items.length > 0 ? items.join(", ") : "");
+const isValidEmail = (value: string) => /[^\s@]+@[^\s@]+\.[^\s@]+/.test(value);
 
 type EmailAddressFieldProps = {
   label: string;
-  value: string;
-  onChange: (value: string) => void;
+  addresses: string[];
+  onChange: (value: string[]) => void;
   placeholder?: string;
 };
 
-const EmailAddressField = ({ label, value, onChange, placeholder }: EmailAddressFieldProps) => {
-  const tokens = useMemo(() => value.split(",").map((item) => item.trim()), [value]);
-  const activeToken = tokens.at(-1) ?? "";
-  const atIndex = activeToken.lastIndexOf("@");
-  const domainFragment = atIndex >= 0 ? activeToken.slice(atIndex + 1).toLowerCase() : "";
+const EmailAddressField = ({ label, addresses, onChange, placeholder }: EmailAddressFieldProps) => {
+  const [inputValue, setInputValue] = useState("");
+  const [localError, setLocalError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const atIndex = inputValue.lastIndexOf("@");
+  const domainFragment = atIndex >= 0 ? inputValue.slice(atIndex + 1).toLowerCase() : "";
 
   const filteredSuggestions = useMemo(
     () =>
       DOMAIN_SUGGESTIONS.filter((domain) =>
-        domainFragment.length === 0
-          ? true
-          : domain.toLowerCase().startsWith(domainFragment),
+        domainFragment.length === 0 ? true : domain.toLowerCase().startsWith(domainFragment),
       ),
     [domainFragment],
   );
 
   const shouldShowSuggestions = atIndex >= 0 && filteredSuggestions.length > 0;
 
+  const addAddress = (raw: string) => {
+    const trimmed = raw.trim();
+    if (!trimmed) return;
+    if (!isValidEmail(trimmed)) {
+      setLocalError("Enter a valid email address.");
+      return;
+    }
+    if (addresses.includes(trimmed)) {
+      setInputValue("");
+      setLocalError(null);
+      return;
+    }
+    setLocalError(null);
+    onChange([...addresses, trimmed]);
+    setInputValue("");
+  };
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    const shouldCommit =
+      event.key === "Enter" ||
+      event.key === "," ||
+      event.key === "Tab" ||
+      event.key === " " ||
+      event.key === "Spacebar";
+
+    if (shouldCommit && inputValue.trim()) {
+      event.preventDefault();
+      addAddress(inputValue);
+      return;
+    }
+
+    if (event.key === "Backspace" && inputValue.length === 0 && addresses.length > 0) {
+      event.preventDefault();
+      const next = [...addresses];
+      const restored = next.pop();
+      if (restored) {
+        onChange(next);
+        setInputValue(restored);
+      }
+    }
+  };
+
   const handleSuggestion = (domain: string) => {
-    const nextTokens = tokens.slice();
-    const nextToken = activeToken.slice(0, atIndex + 1) + domain;
-    nextTokens[nextTokens.length - 1] = nextToken;
-    onChange(formatList(nextTokens));
+    const nextValue = `${inputValue.slice(0, atIndex + 1)}${domain}`;
+    setInputValue(nextValue);
+    setLocalError(null);
+    inputRef.current?.focus();
+  };
+
+  const handleRemove = (index: number) => {
+    const next = addresses.filter((_, idx) => idx !== index);
+    onChange(next);
+  };
+
+  const handleWrapperClick = () => {
+    inputRef.current?.focus();
   };
 
   return (
     <div className="flex flex-col gap-2">
       <label className="text-sm font-medium text-slate-100">{label}</label>
-      <input
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder={placeholder}
-        className="w-full rounded-lg border border-slate-700 bg-slate-900/60 px-4 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/40"
-        type="text"
-        autoComplete="off"
-        spellCheck={false}
-      />
+      <div
+        className="flex min-h-[42px] flex-wrap gap-2 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-1 text-sm text-slate-100 focus-within:border-sky-500 focus-within:ring-2 focus-within:ring-sky-500/40"
+        onClick={handleWrapperClick}
+      >
+        {addresses.map((email, index) => (
+          <span
+            key={`${email}-${index}`}
+            className="inline-flex items-center gap-2 rounded-full bg-slate-800 px-3 py-1 text-xs font-medium text-slate-100"
+          >
+            {email}
+            <button
+              type="button"
+              aria-label={`Remove ${email}`}
+              className="text-slate-400 transition hover:text-white"
+              onClick={() => handleRemove(index)}
+            >
+              &times;
+            </button>
+          </span>
+        ))}
+        <input
+          ref={inputRef}
+          value={inputValue}
+          onChange={(event) => {
+            setInputValue(event.target.value);
+            if (localError) setLocalError(null);
+          }}
+          onKeyDown={handleKeyDown}
+          onBlur={() => {
+            addAddress(inputValue);
+          }}
+          placeholder={addresses.length === 0 ? placeholder : undefined}
+          className="flex-1 min-w-[120px] bg-transparent py-1 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none"
+          type="text"
+          autoComplete="off"
+          spellCheck={false}
+        />
+      </div>
       {shouldShowSuggestions && (
         <div className="flex flex-wrap gap-2">
           {filteredSuggestions.map((domain) => (
             <button
               key={domain}
               type="button"
+              onMouseDown={(event) => event.preventDefault()}
               onClick={() => handleSuggestion(domain)}
               className="rounded-full border border-sky-500/20 bg-sky-500/10 px-3 py-1 text-xs font-medium text-sky-200 transition hover:border-sky-400/40 hover:bg-sky-500/20 hover:text-sky-100"
             >
@@ -87,6 +166,7 @@ const EmailAddressField = ({ label, value, onChange, placeholder }: EmailAddress
           ))}
         </div>
       )}
+      {localError && <p className="text-xs text-rose-400">{localError}</p>}
     </div>
   );
 };
@@ -98,9 +178,9 @@ type EmailFormProps = {
 
 export const EmailForm = ({ defaultBody, defaultSubject }: EmailFormProps) => {
   const [subject, setSubject] = useState(defaultSubject ?? "Important Update from Incridea");
-  const [to, setTo] = useState("");
-  const [cc, setCc] = useState("");
-  const [bcc, setBcc] = useState("");
+  const [to, setTo] = useState<string[]>([]);
+  const [cc, setCc] = useState<string[]>([]);
+  const [bcc, setBcc] = useState<string[]>([]);
   const [body, setBody] = useState(defaultBody ?? "");
   const [feedback, setFeedback] = useState<null | { type: "success" | "error"; text: string }>(
     null,
@@ -121,6 +201,7 @@ export const EmailForm = ({ defaultBody, defaultSubject }: EmailFormProps) => {
   const authorizedUserQuery = api.authorizedUsers.current.useQuery(undefined, { staleTime: 5 * 60 * 1000 });
   const templates = templatesQuery.data ?? [];
   const mustChangePassword = authorizedUserQuery.data?.mustChangePassword ?? false;
+  const [recipientResetKey, setRecipientResetKey] = useState({ to: 0, cc: 0, bcc: 0 });
 
   useEffect(() => {
     const element = bodyRef.current;
@@ -207,10 +288,16 @@ export const EmailForm = ({ defaultBody, defaultSubject }: EmailFormProps) => {
   };
 
   const resetComposerAfterSend = () => {
-    setCc("");
-    setBcc("");
+    setTo([]);
+    setCc([]);
+    setBcc([]);
     setAttachments([]);
     setAttachmentError(null);
+    setRecipientResetKey((prev) => ({
+      to: prev.to + 1,
+      cc: prev.cc + 1,
+      bcc: prev.bcc + 1,
+    }));
     if (attachmentInputRef.current) {
       attachmentInputRef.current.value = "";
     }
@@ -228,11 +315,7 @@ export const EmailForm = ({ defaultBody, defaultSubject }: EmailFormProps) => {
     setFeedback(null);
     setPasswordError(null);
 
-    const toList = splitAddresses(to);
-    const ccList = splitAddresses(cc);
-    const bccList = splitAddresses(bcc);
-
-    if (toList.length === 0) {
+    if (to.length === 0) {
       setFeedback({ type: "error", text: "A primary recipient is required." });
       return;
     }
@@ -240,9 +323,9 @@ export const EmailForm = ({ defaultBody, defaultSubject }: EmailFormProps) => {
     const payload: EmailSendPayload = {
       subject,
       body,
-      to: toList,
-      cc: ccList.length > 0 ? ccList : undefined,
-      bcc: bccList.length > 0 ? bccList : undefined,
+      to,
+      cc: cc.length > 0 ? cc : undefined,
+      bcc: bcc.length > 0 ? bcc : undefined,
       attachments: attachments.length > 0 ? attachments : undefined,
     };
 
@@ -309,28 +392,6 @@ export const EmailForm = ({ defaultBody, defaultSubject }: EmailFormProps) => {
             You are still using a temporary password. Update it from the admin page after sending.
           </div>
         )}
-
-        <EmailAddressField
-          label="To"
-          value={to}
-          onChange={setTo}
-          placeholder="recipient@example.com"
-        />
-
-        <EmailAddressField
-          label="CC"
-          value={cc}
-          onChange={setCc}
-          placeholder="Optional — separate multiple recipients with commas"
-        />
-
-        <EmailAddressField
-          label="BCC"
-          value={bcc}
-          onChange={setBcc}
-          placeholder="Optional — separate multiple recipients with commas"
-        />
-
         <div className="flex flex-col gap-2">
           <label className="text-sm font-medium text-slate-100">Template</label>
           <select
@@ -366,6 +427,32 @@ export const EmailForm = ({ defaultBody, defaultSubject }: EmailFormProps) => {
             )}
           </div>
         </div>
+
+        <EmailAddressField
+          key={`to-${recipientResetKey.to}`}
+          label="To"
+          addresses={to}
+          onChange={setTo}
+          placeholder="Type an email and press Enter"
+        />
+
+        <EmailAddressField
+          key={`cc-${recipientResetKey.cc}`}
+          label="CC"
+          addresses={cc}
+          onChange={setCc}
+          placeholder="Add CC recipients"
+        />
+
+        <EmailAddressField
+          key={`bcc-${recipientResetKey.bcc}`}
+          label="BCC"
+          addresses={bcc}
+          onChange={setBcc}
+          placeholder="Add BCC recipients"
+        />
+
+        
 
         <div className="flex flex-col gap-2">
           <label className="text-sm font-medium text-slate-100">Subject</label>
@@ -518,13 +605,14 @@ const EmailPreview = ({ subject, body, attachments }: EmailPreviewProps) => {
 
         <div className="overflow-hidden rounded-3xl border border-slate-800/60 bg-slate-950/80">
           <div className="flex flex-col items-center gap-3 bg-transparent p-6 text-center">
-            <Image
-              src="/incridea.png"
-              alt="Incridea logo"
-              width={72}
-              height={72}
-              className="rounded-full bg-white p-2 shadow-xl shadow-slate-900/40"
-            />
+              <Image
+                src="https://idtisg3yhk.ufs.sh/f/EfXdVhpoNtwlAtbnqEeXiCHRSzQv8DJPLwYBfc0lb2jqhnAk"
+                alt="Incridea logo"
+                width={120}
+                height={120}
+                className="p-2 shadow-xl shadow-slate-900/40"
+                style={{ height: 120, width: "auto" }}
+              />
           </div>
 
           <div className="space-y-3 bg-slate-50 px-7 py-8 text-sm leading-relaxed text-slate-700">

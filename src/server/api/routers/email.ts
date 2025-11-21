@@ -1,7 +1,9 @@
+/* eslint-disable @typescript-eslint/no-unsafe-return */
+/* eslint-disable @typescript-eslint/no-unsafe-call */
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { TRPCError } from "@trpc/server";
 import { compare } from "bcryptjs";
-import { readFileSync } from "node:fs";
-import path from "node:path";
 import * as nodemailer from "nodemailer";
 import type { Transporter } from "nodemailer";
 import type SMTPTransport from "nodemailer/lib/smtp-transport";
@@ -31,8 +33,7 @@ const transporter: Transporter<SMTPTransport.SentMessageInfo, SMTPTransport.Opti
   nodemailer.createTransport(transportOptions);
 const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024; // 5 MB
 
-const LOGO_BUFFER = readFileSync(path.resolve(process.cwd(), "public/incridea.png"));
-const LOGO_CID = "email-app-logo";
+const LOGO_URL = "https://idtisg3yhk.ufs.sh/f/EfXdVhpoNtwlAtbnqEeXiCHRSzQv8DJPLwYBfc0lb2jqhnAk";
 
 const escapeHtml = (value: string) =>
   value
@@ -57,7 +58,7 @@ const renderEmailHtml = (body: string) => {
           <table role="presentation" cellpadding="0" cellspacing="0" width="600" style="background-color: #ffffff; border-radius: 24px; overflow: hidden; box-shadow: 0 20px 45px rgba(15, 23, 42, 0.12);">
             <tr>
               <td align="center" style="padding: 32px 24px;">
-                <img src="cid:${LOGO_CID}" alt="Incridea Mailer" width="96" height="96" style="display: block; border: 0;" />
+                <img src="${LOGO_URL}" alt="Incridea" height="72" style="display: block; border: 0; height: 96px; width: auto;" />
 
               </td>
             </tr>
@@ -110,15 +111,7 @@ export const emailRouter = createTRPCRouter({
       }
       const html = renderEmailHtml(body);
 
-      const attachments: NonNullable<nodemailer.SendMailOptions["attachments"]> = [
-        {
-          filename: "incridea-logo.png",
-          content: LOGO_BUFFER,
-          contentType: "image/png",
-          cid: LOGO_CID,
-          contentDisposition: "inline",
-        },
-      ];
+      const attachments: NonNullable<nodemailer.SendMailOptions["attachments"]> = [];
 
       if (userAttachments && userAttachments.length > 0) {
         for (const file of userAttachments) {

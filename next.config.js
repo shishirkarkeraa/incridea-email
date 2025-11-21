@@ -3,10 +3,19 @@
  * for Docker builds.
  */
 if (!process.env.SKIP_ENV_VALIDATION && process.env.npm_lifecycle_event !== "lint") {
-	await import("./src/env.ts");
+	await import("./src/env.js");
 }
 
 /** @type {import("next").NextConfig} */
-const config = {};
+const config = {
+	images: {
+		remotePatterns: [
+			{
+				protocol: "https",
+				hostname: "idtisg3yhk.ufs.sh",
+			},
+		],
+	},
+};
 
 export default config;

@@ -129,7 +129,8 @@ export const protectedProcedure = t.procedure
     }
     return next({
       ctx: {
-        // infers the `session` as non-nullable
+        // keep existing context while narrowing the session type
+        ...ctx,
         session: { ...ctx.session, user: ctx.session.user },
       },
     });
