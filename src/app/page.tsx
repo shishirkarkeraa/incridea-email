@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { ChangePasswordButton } from "~/app/_components/change-password-button";
 import { EmailForm } from "~/app/_components/email-form";
+import { EmailsSentButton } from "~/app/_components/emails-sent-button";
 import { auth } from "~/server/auth";
 import { db } from "~/server/db";
 
@@ -39,7 +40,10 @@ export default async function Home() {
                     Sign out
                   </Link>
                   {isAuthorized && (
-                    <ChangePasswordButton mustChangePassword={authorizedUser?.mustChangePassword ?? false} />
+                    <>
+                      <ChangePasswordButton mustChangePassword={authorizedUser?.mustChangePassword ?? false} />
+                      <EmailsSentButton />
+                    </>
                   )}
                 </>
               ) : (

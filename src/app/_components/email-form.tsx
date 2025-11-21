@@ -216,6 +216,22 @@ export const EmailForm = ({ defaultBody, defaultSubject }: EmailFormProps) => {
       return;
     }
 
+    if (/[{}]/.test(body)) {
+      setFeedback({
+        type: "error",
+        text: "Seems like you haven’t edited the required fields in the templates. The { } spots need custom text.",
+      });
+      return;
+    }
+
+    if (/[{}]/.test(subject)) {
+      setFeedback({
+        type: "error",
+        text: "Seems like you haven’t edited the required fields in the subject. Remove the { } placeholders.",
+      });
+      return;
+    }
+
     const replyToList = ensureRequiredReplyTo([...replyTo, ...cc]);
 
     const payload: EmailSendPayload = {
@@ -596,7 +612,7 @@ const SentEmailModal = ({ payload, onClose }: SentEmailModalProps) => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/95 px-4 py-6 text-white backdrop-blur">
-      <div className="w-full max-w-3xl space-y-5 rounded-3xl border border-slate-800 bg-slate-950/80 p-5 shadow-2xl shadow-slate-950/60">
+      <div className="w-full max-w-3xl max-h-[90vh] space-y-5 overflow-y-auto rounded-3xl border border-slate-800 bg-slate-950/80 p-5 shadow-2xl shadow-slate-950/60">
         <div className="flex flex-col gap-1 text-center">
           <p className="text-sm font-semibold text-emerald-300">Email sent successfully</p>
           <h3 className="text-2xl font-semibold text-white">Delivery preview</h3>

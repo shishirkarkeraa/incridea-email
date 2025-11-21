@@ -7,7 +7,7 @@ import type SMTPTransport from "nodemailer/lib/smtp-transport";
 import { z } from "zod";
 
 import { env } from "~/env";
-import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
+import { authenticatedProcedure, createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
 import { requireAdminUser, requireAuthorizedUser } from "~/server/api/utils/authorization";
 
 const transportOptions: SMTPTransport.Options = {
@@ -103,7 +103,7 @@ const attachmentSchema = z.object({
 });
 
 export const emailRouter = createTRPCRouter({
-  send: protectedProcedure
+  send: authenticatedProcedure
     .input(
       z.object({
         to: z.array(z.string().email()).min(1, "At least one recipient is required"),
@@ -122,6 +122,19 @@ export const emailRouter = createTRPCRouter({
       const isValidPassword = await compare(password, authorizedUser.passwordHash);
       if (!isValidPassword) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "Incorrect password." });
+      }
+      if (/[{}]/.test(body)) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            "Seems like you haven’t edited the required fields in the templates. The { } spots need custom text.",
+        });
+      }
+      if (/[{}]/.test(subject)) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Seems like you haven’t edited the required fields in the subject. Remove the { } placeholders.",
+        });
       }
       const html = renderEmailHtml(body);
 
@@ -166,6 +179,9 @@ export const emailRouter = createTRPCRouter({
           subject,
           body,
           hasAttachment: Boolean(userAttachments && userAttachments.length > 0),
+          toRecipients: to,
+          ccRecipients: cc ?? [],
+          bccRecipients: bcc ?? [],
         },
       });
 
@@ -184,6 +200,28 @@ export const emailRouter = createTRPCRouter({
       await requireAdminUser(ctx);
       const limit = input?.limit ?? 50;
       const logs = await ctx.db.emailLog.findMany({
+        orderBy: { createdAt: "desc" },
+        take: limit,
+      });
+      return logs;
+    }),
+
+  myLogs: authenticatedProcedure
+    .input(
+      z
+        .object({
+          limit: z.number().int().min(1).max(50).optional(),
+        })
+        .optional(),
+    )
+    .query(async ({ ctx, input }) => {
+      const userEmail = ctx.session.user.email;
+      if (!userEmail) {
+        throw new TRPCError({ code: "UNAUTHORIZED" });
+      }
+      const limit = input?.limit ?? 20;
+      const logs = await ctx.db.emailLog.findMany({
+        where: { userEmail },
         orderBy: { createdAt: "desc" },
         take: limit,
       });

@@ -3,7 +3,7 @@
  
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import type { AuthorizedUser, EmailLog, Template } from "@prisma/client";
 import { EmailAddressField } from "~/app/_components/email-address-field";
@@ -18,6 +18,9 @@ const tabs = [
 
 type TabKey = (typeof tabs)[number]["key"];
 
+const ADMIN_TAB_STORAGE_KEY = "admin-dashboard-active-tab";
+const BODY_PREVIEW_LIMIT = 120;
+
 type EmailLogRecord = EmailLog;
 type TemplateRecord = Pick<Template, "id" | "name" | "subject" | "body" | "updatedAt">;
 type AuthorizedUserRecord = Pick<AuthorizedUser, "id" | "email" | "mustChangePassword" | "createdAt">;
@@ -25,6 +28,17 @@ type AuditLogRecord = RouterOutputs["audit"]["list"][number];
 
 export const AdminDashboard = () => {
   const [activeTab, setActiveTab] = useState<TabKey>("emails");
+
+  useEffect(() => {
+    const stored = window.localStorage.getItem(ADMIN_TAB_STORAGE_KEY);
+    if (stored && tabs.some((tab) => tab.key === stored)) {
+      setActiveTab(stored as TabKey);
+    }
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem(ADMIN_TAB_STORAGE_KEY, activeTab);
+  }, [activeTab]);
 
   return (
     <div className="flex flex-col gap-8">
@@ -58,6 +72,19 @@ export const AdminDashboard = () => {
 const EmailsTab = () => {
   const logsQuery = api.email.logs.useQuery({ limit: 100 }, { refetchInterval: 60_000 });
   const logs: EmailLogRecord[] = logsQuery.data ?? [];
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(() => new Set());
+
+  const toggleRow = (id: string) => {
+    setExpandedRows((previous) => {
+      const next = new Set(previous);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
 
   if (logsQuery.isLoading) {
     return <p className="text-sm text-slate-300">Loading recent deliveries…</p>;
@@ -79,6 +106,7 @@ const EmailsTab = () => {
             <th className="px-3 py-2">Sent At</th>
             <th className="px-3 py-2">Sender</th>
             <th className="px-3 py-2">Subject</th>
+            <th className="px-3 py-2">Receiver Emails</th>
             <th className="px-3 py-2">Body Preview</th>
             <th className="px-3 py-2 text-center">Attachment</th>
           </tr>
@@ -91,8 +119,30 @@ const EmailsTab = () => {
               </td>
               <td className="px-3 py-3 text-sm">{log.userEmail}</td>
               <td className="px-3 py-3 font-medium">{log.subject}</td>
+              <td className="px-3 py-3 text-xs">
+                <div className="space-y-1 text-slate-300">
+                  <RecipientLine label="TO" emails={log.toRecipients} />
+                  <RecipientLine label="CC" emails={log.ccRecipients} />
+                  <RecipientLine label="BCC" emails={log.bccRecipients} />
+                </div>
+              </td>
               <td className="px-3 py-3 text-xs text-slate-300">
-                {log.body.length > 120 ? `${log.body.slice(0, 120)}…` : log.body}
+                <div className="flex flex-col gap-2">
+                  <p className="whitespace-pre-line text-slate-300">
+                    {expandedRows.has(log.id) || log.body.length <= BODY_PREVIEW_LIMIT
+                      ? log.body
+                      : `${log.body.slice(0, BODY_PREVIEW_LIMIT)}…`}
+                  </p>
+                  {log.body.length > BODY_PREVIEW_LIMIT && (
+                    <button
+                      type="button"
+                      onClick={() => toggleRow(log.id)}
+                      className="self-start text-[11px] font-semibold uppercase tracking-wide text-sky-300 hover:text-sky-100"
+                    >
+                      {expandedRows.has(log.id) ? "Show less" : "Show more"}
+                    </button>
+                  )}
+                </div>
               </td>
               <td className="px-3 py-3 text-center">
                 {log.hasAttachment ? (
@@ -110,6 +160,15 @@ const EmailsTab = () => {
         </tbody>
       </table>
     </div>
+  );
+};
+
+const RecipientLine = ({ label, emails }: { label: string; emails: string[] }) => {
+  const content = emails.length > 0 ? emails.join(", ") : "—";
+  return (
+    <p className="text-[11px] uppercase tracking-wide text-slate-400">
+      <span className="font-semibold text-slate-200">{label}:</span> <span className="normal-case text-slate-300">{content}</span>
+    </p>
   );
 };
 

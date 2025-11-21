@@ -14,6 +14,7 @@ import { ZodError } from "zod";
 
 import { auth } from "~/server/auth";
 import { db } from "~/server/db";
+import { requireAdminUser, requireAuthorizedUser } from "~/server/api/utils/authorization";
 
 /**
  * 1. CONTEXT
@@ -135,3 +136,13 @@ export const protectedProcedure = t.procedure
       },
     });
   });
+
+export const authenticatedProcedure = protectedProcedure.use(async ({ ctx, next }) => {
+  await requireAuthorizedUser(ctx);
+  return next();
+});
+
+export const adminProcedure = protectedProcedure.use(async ({ ctx, next }) => {
+  await requireAdminUser(ctx);
+  return next();
+});

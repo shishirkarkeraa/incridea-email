@@ -3,8 +3,8 @@ import { TRPCError } from "@trpc/server";
 import { compare, hash } from "bcryptjs";
 import { z } from "zod";
 
-import { createTRPCRouter, protectedProcedure, type TRPCContext } from "~/server/api/trpc";
-import { requireAdminUser, requireAuthorizedUser } from "~/server/api/utils/authorization";
+import { adminProcedure, createTRPCRouter, protectedProcedure, type TRPCContext } from "~/server/api/trpc";
+import { requireAuthorizedUser } from "~/server/api/utils/authorization";
 
 const passwordSchema = z.string().min(8, "Password must be at least 8 characters.").max(128);
 
@@ -53,8 +53,7 @@ export const authorizedUsersRouter = createTRPCRouter({
       return { success: true };
     }),
 
-  list: protectedProcedure.query(async ({ ctx }) => {
-    await requireAdminUser(ctx);
+  list: adminProcedure.query(async ({ ctx }) => {
     const users = await ctx.db.authorizedUser.findMany({
       orderBy: { email: "asc" },
       select: { id: true, email: true, mustChangePassword: true, createdAt: true },
@@ -62,14 +61,13 @@ export const authorizedUsersRouter = createTRPCRouter({
     return users;
   }),
 
-  create: protectedProcedure
+  create: adminProcedure
     .input(
       z.object({
         emails: z.array(z.string().email()).min(1).max(100),
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      await requireAdminUser(ctx);
       const normalizedEmails = Array.from(
         new Set(
           input.emails
@@ -106,7 +104,7 @@ export const authorizedUsersRouter = createTRPCRouter({
       return { results };
     }),
 
-  resetPassword: protectedProcedure
+  resetPassword: adminProcedure
     .input(
       z.object({
         id: z.string().min(1),
@@ -114,7 +112,6 @@ export const authorizedUsersRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      await requireAdminUser(ctx);
       const hashValue = await hash(input.password, 12);
       const updated = await ctx.db.authorizedUser.update({
         where: { id: input.id },
@@ -125,10 +122,9 @@ export const authorizedUsersRouter = createTRPCRouter({
       return { success: true };
     }),
 
-  remove: protectedProcedure
+  remove: adminProcedure
     .input(z.object({ id: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
-      await requireAdminUser(ctx);
       const removed = await ctx.db.authorizedUser.delete({
         where: { id: input.id },
         select: { email: true },

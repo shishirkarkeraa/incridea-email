@@ -100,5 +100,8 @@ model EmailLog {
   subject       String
   body          String
   hasAttachment Boolean  @default(false)
+  toRecipients  String[] @default([])
+  ccRecipients  String[] @default([])
+  bccRecipients String[] @default([])
   createdAt     DateTime @default(now())
 }

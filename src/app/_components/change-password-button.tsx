@@ -72,10 +72,10 @@ export const ChangePasswordButton = ({ mustChangePassword = false }: ChangePassw
 
       {open && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 px-6 py-8 text-white backdrop-blur"
-          style={{ zIndex: 70 }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 px-4 py-6 text-white backdrop-blur"
+          style={{ zIndex: 200 }}
         >
-          <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-950 p-6 shadow-2xl">
+          <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-950 p-6 shadow-2xl shadow-sky-950/40">
             <h3 className="text-lg font-semibold text-white">Update Password</h3>
             <p className="mt-2 text-sm text-slate-400">Enter your current password and choose a new one.</p>
 
