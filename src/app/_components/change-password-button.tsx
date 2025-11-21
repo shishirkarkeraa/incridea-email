@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { createPortal } from "react-dom";
+import { useEffect, useState, type FormEvent } from "react";
 
 import { api } from "~/trpc/react";
 
@@ -14,8 +15,13 @@ export const ChangePasswordButton = ({ mustChangePassword = false }: ChangePassw
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [inlineMessage, setInlineMessage] = useState<null | { type: "error" | "success"; text: string }>(null);
+  const [isMounted, setIsMounted] = useState(false);
 
   const changePasswordMutation = api.authorizedUsers.changePassword.useMutation();
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   const resetForm = () => {
     setCurrentPassword("");
@@ -70,82 +76,85 @@ export const ChangePasswordButton = ({ mustChangePassword = false }: ChangePassw
         <p className="text-xs text-rose-300">{inlineMessage.text}</p>
       )}
 
-      {open && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 px-4 py-6 text-white backdrop-blur"
-          style={{ zIndex: 200 }}
-        >
-          <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-950 p-6 shadow-2xl shadow-sky-950/40">
-            <h3 className="text-lg font-semibold text-white">Update Password</h3>
-            <p className="mt-2 text-sm text-slate-400">Enter your current password and choose a new one.</p>
+      {isMounted && open
+        ? createPortal(
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 px-4 py-6 text-white backdrop-blur"
+              style={{ zIndex: 1000 }}
+            >
+              <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-950 p-6 shadow-2xl shadow-sky-950/40">
+                <h3 className="text-lg font-semibold text-white">Update Password</h3>
+                <p className="mt-2 text-sm text-slate-400">Enter your current password and choose a new one.</p>
 
-            <form onSubmit={handleSubmit} className="mt-5 space-y-4">
-              <div className="flex flex-col gap-2">
-                <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Current password
-                </label>
-                <input
-                  type="password"
-                  value={currentPassword}
-                  onChange={(event) => setCurrentPassword(event.target.value)}
-                  className="rounded-lg border border-slate-700 bg-slate-900 px-4 py-2 text-sm text-white focus:border-sky-500 focus:outline-none"
-                  required
-                />
+                <form onSubmit={handleSubmit} className="mt-5 space-y-4">
+                  <div className="flex flex-col gap-2">
+                    <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Current password
+                    </label>
+                    <input
+                      type="password"
+                      value={currentPassword}
+                      onChange={(event) => setCurrentPassword(event.target.value)}
+                      className="rounded-lg border border-slate-700 bg-slate-900 px-4 py-2 text-sm text-white focus:border-sky-500 focus:outline-none"
+                      required
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-2">
+                    <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      New password
+                    </label>
+                    <input
+                      type="password"
+                      value={newPassword}
+                      onChange={(event) => setNewPassword(event.target.value)}
+                      className="rounded-lg border border-slate-700 bg-slate-900 px-4 py-2 text-sm text-white focus:border-sky-500 focus:outline-none"
+                      required
+                      minLength={8}
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-2">
+                    <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Confirm new password
+                    </label>
+                    <input
+                      type="password"
+                      value={confirmPassword}
+                      onChange={(event) => setConfirmPassword(event.target.value)}
+                      className="rounded-lg border border-slate-700 bg-slate-900 px-4 py-2 text-sm text-white focus:border-sky-500 focus:outline-none"
+                      required
+                      minLength={8}
+                    />
+                  </div>
+
+                  {inlineMessage?.type === "error" && open && (
+                    <p className="text-xs text-rose-300">{inlineMessage.text}</p>
+                  )}
+
+                  <div className="flex justify-end gap-3">
+                    <button
+                      type="button"
+                      onClick={closeModal}
+                      className="rounded-lg border border-slate-700 px-4 py-2 text-slate-200 hover:border-slate-500"
+                      disabled={changePasswordMutation.isPending}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={changePasswordMutation.isPending}
+                      className="rounded-lg bg-sky-500 px-5 py-2 font-semibold text-white disabled:opacity-60"
+                    >
+                      {changePasswordMutation.isPending ? "Saving…" : "Save password"}
+                    </button>
+                  </div>
+                </form>
               </div>
-
-              <div className="flex flex-col gap-2">
-                <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  New password
-                </label>
-                <input
-                  type="password"
-                  value={newPassword}
-                  onChange={(event) => setNewPassword(event.target.value)}
-                  className="rounded-lg border border-slate-700 bg-slate-900 px-4 py-2 text-sm text-white focus:border-sky-500 focus:outline-none"
-                  required
-                  minLength={8}
-                />
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Confirm new password
-                </label>
-                <input
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(event) => setConfirmPassword(event.target.value)}
-                  className="rounded-lg border border-slate-700 bg-slate-900 px-4 py-2 text-sm text-white focus:border-sky-500 focus:outline-none"
-                  required
-                  minLength={8}
-                />
-              </div>
-
-              {inlineMessage?.type === "error" && open && (
-                <p className="text-xs text-rose-300">{inlineMessage.text}</p>
-              )}
-
-              <div className="flex justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={closeModal}
-                  className="rounded-lg border border-slate-700 px-4 py-2 text-slate-200 hover:border-slate-500"
-                  disabled={changePasswordMutation.isPending}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={changePasswordMutation.isPending}
-                  className="rounded-lg bg-sky-500 px-5 py-2 font-semibold text-white disabled:opacity-60"
-                >
-                  {changePasswordMutation.isPending ? "Saving…" : "Save password"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 };
