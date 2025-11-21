@@ -31,7 +31,7 @@ export const templatesRouter = createTRPCRouter({
       const template = await ctx.db.template.create({
         data: {
           name: input.name,
-          subject: normalizedSubject ? normalizedSubject : null,
+          subject: normalizedSubject ?? null,
           body: input.body,
         },
       });
@@ -54,7 +54,7 @@ export const templatesRouter = createTRPCRouter({
         where: { id: input.id },
         data: {
           name: input.name,
-          subject: normalizedSubject ? normalizedSubject : null,
+          subject: normalizedSubject ?? null,
           body: input.body,
         },
       });
