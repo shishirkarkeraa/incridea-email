@@ -1,12 +1,15 @@
 /* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
+ 
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+ 
+ 
 "use client";
 
 import { useState } from "react";
 
-import type { AuthorizedUser, EmailLog, Template } from "../../../../generated/prisma";
+import type { AuthorizedUser, EmailLog, Template } from "@prisma/client";
 import { api } from "~/trpc/react";
 
 const tabs = [
