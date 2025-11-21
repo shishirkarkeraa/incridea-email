@@ -3,22 +3,25 @@
  
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import type { AuthorizedUser, EmailLog, Template } from "@prisma/client";
-import { api } from "~/trpc/react";
+import { EmailAddressField } from "~/app/_components/email-address-field";
+import { api, type RouterOutputs } from "~/trpc/react";
 
 const tabs = [
   { key: "emails", label: "Emails Sent" },
   { key: "templates", label: "Templates" },
   { key: "users", label: "Authorized Users" },
+  { key: "audit", label: "Audit Logs" },
 ] as const;
 
 type TabKey = (typeof tabs)[number]["key"];
 
 type EmailLogRecord = EmailLog;
-type TemplateRecord = Pick<Template, "id" | "name" | "body" | "updatedAt">;
-type AuthorizedUserRecord = Pick<AuthorizedUser, "id" | "email" | "role" | "mustChangePassword" | "createdAt">;
+type TemplateRecord = Pick<Template, "id" | "name" | "subject" | "body" | "updatedAt">;
+type AuthorizedUserRecord = Pick<AuthorizedUser, "id" | "email" | "mustChangePassword" | "createdAt">;
+type AuditLogRecord = RouterOutputs["audit"]["list"][number];
 
 export const AdminDashboard = () => {
   const [activeTab, setActiveTab] = useState<TabKey>("emails");
@@ -46,6 +49,7 @@ export const AdminDashboard = () => {
         {activeTab === "emails" && <EmailsTab />}
         {activeTab === "templates" && <TemplatesTab />}
         {activeTab === "users" && <UsersTab />}
+        {activeTab === "audit" && <AuditLogsTab />}
       </section>
     </div>
   );
@@ -129,33 +133,40 @@ const TemplatesTab = () => {
     },
   });
 
-  const [newTemplate, setNewTemplate] = useState({ name: "", body: "" });
+  const [newTemplate, setNewTemplate] = useState({ name: "", subject: "", body: "" });
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
-  const [editingState, setEditingState] = useState({ name: "", body: "" });
+  const [editingState, setEditingState] = useState({ name: "", subject: "", body: "" });
 
   const startEdit = (template: TemplateRecord) => {
     setEditingTemplateId(template.id);
-    setEditingState({ name: template.name, body: template.body });
+    setEditingState({ name: template.name, subject: template.subject ?? "", body: template.body });
   };
 
   const resetEditState = () => {
     setEditingTemplateId(null);
-    setEditingState({ name: "", body: "" });
+    setEditingState({ name: "", subject: "", body: "" });
   };
 
   const handleCreate = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!newTemplate.name || !newTemplate.body) return;
-    await createTemplateMutation.mutateAsync(newTemplate);
-    setNewTemplate({ name: "", body: "" });
+    const subjectValue = newTemplate.subject.trim();
+    await createTemplateMutation.mutateAsync({
+      name: newTemplate.name,
+      subject: subjectValue.length > 0 ? subjectValue : undefined,
+      body: newTemplate.body,
+    });
+    setNewTemplate({ name: "", subject: "", body: "" });
   };
 
   const handleUpdate = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!editingTemplateId) return;
+    const subjectValue = editingState.subject.trim();
     await updateTemplateMutation.mutateAsync({
       id: editingTemplateId,
       name: editingState.name,
+      subject: subjectValue.length > 0 ? subjectValue : undefined,
       body: editingState.body,
     });
     resetEditState();
@@ -183,6 +194,13 @@ const TemplatesTab = () => {
             className="rounded-lg border border-slate-700 bg-slate-950 px-4 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none"
             maxLength={80}
             required
+          />
+          <input
+            value={newTemplate.subject}
+            onChange={(event) => setNewTemplate((prev) => ({ ...prev, subject: event.target.value }))}
+            placeholder="Optional subject line"
+            className="rounded-lg border border-slate-700 bg-slate-950 px-4 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none"
+            maxLength={120}
           />
           <textarea
             value={newTemplate.body}
@@ -219,6 +237,11 @@ const TemplatesTab = () => {
                 <div>
                   <h4 className="text-base font-semibold text-white">{template.name}</h4>
                   <p className="text-xs uppercase text-slate-500">Updated {new Date(template.updatedAt).toLocaleString()}</p>
+                  {template.subject ? (
+                    <p className="mt-1 text-sm text-slate-300">Subject: {template.subject}</p>
+                  ) : (
+                    <p className="mt-1 text-xs text-slate-500">No subject stored.</p>
+                  )}
                 </div>
                 <div className="flex gap-2 text-sm">
                   <button
@@ -251,6 +274,13 @@ const TemplatesTab = () => {
                     className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none"
                     maxLength={80}
                     required
+                  />
+                  <input
+                    value={editingState.subject}
+                    onChange={(event) => setEditingState((prev) => ({ ...prev, subject: event.target.value }))}
+                    className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none"
+                    maxLength={120}
+                    placeholder="Optional subject line"
                   />
                   <textarea
                     value={editingState.body}
@@ -286,8 +316,17 @@ const UsersTab = () => {
   const usersQuery = api.authorizedUsers.list.useQuery(undefined, { refetchInterval: 60_000 });
   const users: AuthorizedUserRecord[] = usersQuery.data ?? [];
   const createUserMutation = api.authorizedUsers.create.useMutation({
-    onSuccess: async () => {
+    onSuccess: async (result) => {
       await utils.authorizedUsers.list.invalidate();
+      const createdCount = result.results.filter((entry) => entry.status === "created").length;
+      const skippedCount = result.results.length - createdCount;
+      if (createdCount === 0) {
+        setCreateFeedback(skippedCount > 0 ? "All entries already authorized." : null);
+      } else {
+        const plural = createdCount === 1 ? "user" : "users";
+        const skipNote = skippedCount > 0 ? ` (${skippedCount} skipped)` : "";
+        setCreateFeedback(`Added ${createdCount} ${plural}${skipNote}.`);
+      }
     },
   });
   const resetPasswordMutation = api.authorizedUsers.resetPassword.useMutation({
@@ -301,12 +340,57 @@ const UsersTab = () => {
     },
   });
 
-  const [formState, setFormState] = useState({ email: "", password: "", role: "USER" as "USER" | "ADMIN" });
+  const [pendingEmails, setPendingEmails] = useState<string[]>([]);
+  const [createFeedback, setCreateFeedback] = useState<string | null>(null);
+
+  const existingEmailSet = useMemo(() => new Set(users.map((user) => user.email.toLowerCase())), [users]);
+
+  const { duplicateExisting, duplicateWithin } = useMemo(() => {
+    const normalizedEntries = pendingEmails
+      .map((email) => {
+        const trimmed = email.trim();
+        return { original: email, trimmed, normalized: trimmed.toLowerCase() };
+      })
+      .filter((entry) => entry.trimmed.length > 0);
+
+    const dupExistingMap = new Map<string, string>();
+    const dupWithinMap = new Map<string, string>();
+    const seenWithin = new Set<string>();
+
+    for (const entry of normalizedEntries) {
+      if (existingEmailSet.has(entry.normalized) && !dupExistingMap.has(entry.normalized)) {
+        dupExistingMap.set(entry.normalized, entry.trimmed);
+      }
+      if (seenWithin.has(entry.normalized)) {
+        if (!dupWithinMap.has(entry.normalized)) {
+          dupWithinMap.set(entry.normalized, entry.trimmed);
+        }
+      } else {
+        seenWithin.add(entry.normalized);
+      }
+    }
+
+    return {
+      duplicateExisting: Array.from(dupExistingMap.values()),
+      duplicateWithin: Array.from(dupWithinMap.values()),
+    };
+  }, [pendingEmails, existingEmailSet]);
+
+  const hasConflicts = duplicateExisting.length > 0 || duplicateWithin.length > 0;
 
   const handleCreate = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    await createUserMutation.mutateAsync(formState);
-    setFormState({ email: "", password: "", role: "USER" });
+    setCreateFeedback(null);
+    if (pendingEmails.length === 0) {
+      setCreateFeedback("Enter at least one email address.");
+      return;
+    }
+    if (hasConflicts) {
+      setCreateFeedback("Resolve duplicate or already-authorized emails before adding.");
+      return;
+    }
+    await createUserMutation.mutateAsync({ emails: pendingEmails });
+    setPendingEmails([]);
   };
 
   const handleResetPassword = async (user: AuthorizedUserRecord) => {
@@ -321,49 +405,47 @@ const UsersTab = () => {
     await removeUserMutation.mutateAsync({ id: user.id });
   };
 
-  const badgeClass = (role: string) =>
-    role === "ADMIN"
-      ? "bg-purple-500/20 text-purple-200"
-      : "bg-slate-800 text-slate-300";
-
   return (
     <div className="flex flex-col gap-8">
       <form onSubmit={handleCreate} className="rounded-2xl border border-slate-800/60 bg-slate-900/40 p-5">
         <h3 className="text-lg font-semibold text-white">Add Authorized User</h3>
-        <div className="mt-4 grid gap-4 lg:grid-cols-2">
-          <input
-            type="email"
-            value={formState.email}
-            onChange={(event) => setFormState((prev) => ({ ...prev, email: event.target.value }))}
-            placeholder="user@example.com"
-            className="rounded-lg border border-slate-700 bg-slate-950 px-4 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none"
-            required
+        <div className="mt-4 grid gap-4">
+          <EmailAddressField
+            label="Authorized email addresses"
+            addresses={pendingEmails}
+            onChange={(next) => {
+              setPendingEmails(next);
+              if (createFeedback) {
+                setCreateFeedback(null);
+              }
+            }}
+            placeholder="Paste or type multiple emails"
           />
-          <input
-            type="text"
-            value={formState.password}
-            onChange={(event) => setFormState((prev) => ({ ...prev, password: event.target.value }))}
-            placeholder="Temporary password"
-            className="rounded-lg border border-slate-700 bg-slate-950 px-4 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none"
-            required
-            minLength={8}
-          />
-          <select
-            value={formState.role}
-            onChange={(event) => setFormState((prev) => ({ ...prev, role: event.target.value as "USER" | "ADMIN" }))}
-            className="rounded-lg border border-slate-700 bg-slate-950 px-4 py-2 text-sm text-slate-100 focus:border-sky-500 focus:outline-none"
-          >
-            <option value="USER">Standard user</option>
-            <option value="ADMIN">Administrator</option>
-          </select>
         </div>
+        <p className="text-xs text-slate-500">
+          Separate multiple emails with spaces, commas, or new lines. Temporary password defaults to each user&apos;s email address.
+        </p>
+        {duplicateExisting.length > 0 && (
+          <p className="mt-2 text-xs text-rose-300">
+            Already authorized: {duplicateExisting.join(", ")}
+          </p>
+        )}
+        {duplicateWithin.length > 0 && (
+          <p className="mt-1 text-xs text-rose-300">
+            Duplicate entries: {duplicateWithin.join(", ")}
+          </p>
+        )}
+        {createFeedback && <p className="mt-2 text-xs text-sky-300">{createFeedback}</p>}
+        {createUserMutation.error && (
+          <p className="mt-2 text-xs text-rose-300">{createUserMutation.error.message}</p>
+        )}
         <div className="mt-4 flex justify-end">
           <button
             type="submit"
-            disabled={createUserMutation.isPending}
+            disabled={createUserMutation.isPending || pendingEmails.length === 0 || hasConflicts}
             className="rounded-lg bg-sky-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
           >
-            {createUserMutation.isPending ? "Creating…" : "Add User"}
+            {createUserMutation.isPending ? "Creating…" : "Add User(s)"}
           </button>
         </div>
       </form>
@@ -383,9 +465,6 @@ const UsersTab = () => {
                 <div>
                   <p className="text-base font-semibold text-white">{user.email}</p>
                   <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-400">
-                    <span className={`rounded-full px-3 py-1 font-semibold ${badgeClass(user.role)}`}>
-                      {user.role}
-                    </span>
                     {user.mustChangePassword && (
                       <span className="rounded-full bg-amber-500/20 px-3 py-1 font-semibold text-amber-100">
                         Must change password
@@ -418,6 +497,49 @@ const UsersTab = () => {
             </div>
           ))}
         </div>
+      </div>
+    </div>
+  );
+};
+
+const AuditLogsTab = () => {
+  const auditQuery = api.audit.list.useQuery({ limit: 200 }, { refetchInterval: 60_000 });
+  const logs: AuditLogRecord[] = auditQuery.data ?? [];
+
+  if (auditQuery.isLoading) {
+    return <p className="text-sm text-slate-300">Loading audit activity…</p>;
+  }
+
+  if (auditQuery.isError) {
+    return <p className="text-sm text-rose-300">Could not fetch audit logs.</p>;
+  }
+
+  if (logs.length === 0) {
+    return <p className="text-sm text-slate-400">No audit entries recorded yet.</p>;
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <p className="text-xs text-slate-500">Most recent activity. Refreshes automatically every minute.</p>
+      <div className="max-h-[480px] overflow-y-auto rounded-2xl border border-slate-800/60 bg-slate-900/40">
+        <ul className="divide-y divide-slate-800/60 text-sm">
+          {logs.map((log) => {
+            const actorName = log.user?.name ?? null;
+            const actorEmail = log.userEmail ?? log.user?.email ?? "System";
+            return (
+              <li key={log.id} className="px-5 py-4">
+                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                  <p className="font-semibold text-white">{log.description}</p>
+                  <span className="text-xs text-slate-400">{new Date(log.createdAt).toLocaleString()}</span>
+                </div>
+                <p className="text-xs text-slate-400">
+                  Performed by {actorEmail}
+                  {actorName ? ` (${actorName})` : ""}
+                </p>
+              </li>
+            );
+          })}
+        </ul>
       </div>
     </div>
   );

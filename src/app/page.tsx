@@ -1,6 +1,7 @@
 
 import Link from "next/link";
 
+import { ChangePasswordButton } from "~/app/_components/change-password-button";
 import { EmailForm } from "~/app/_components/email-form";
 import { auth } from "~/server/auth";
 import { db } from "~/server/db";
@@ -19,8 +20,8 @@ export default async function Home() {
         <header className="flex flex-col gap-6 rounded-3xl border border-slate-800 bg-slate-950/70 p-10 shadow-2xl shadow-sky-950/30 backdrop-blur">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
-              <p className="text-sm uppercase tracking-wider text-sky-400">Incridea Mailer</p>
-              <h1 className="mt-1 text-4xl font-bold text-white md:text-5xl">Send Branded Updates Effortlessly</h1>
+              <p className="text-sm uppercase tracking-wider text-sky-400">incridea@nmamit.in</p>
+              <h1 className="mt-1 text-4xl font-bold text-white md:text-5xl">Incridea Mailer</h1>
               <p className="mt-3 max-w-2xl text-base text-slate-300">
                 Draft and deliver official communications with a single, secure workflow. Authenticated members can send beautifully formatted emails through the Incridea SMTP service.
               </p>
@@ -28,13 +29,18 @@ export default async function Home() {
             <div className="flex flex-col items-start gap-3 text-sm text-slate-300">
               {session?.user ? (
                 <>
-                  <span className="rounded-full border border-sky-500/30 bg-sky-500/10 px-4 py-1">Signed in as {userName}</span>
+                  <span className="rounded-full border border-sky-500/30 bg-sky-500/10 px-4 py-1 text-sky-100">
+                    {userName}
+                  </span>
                   <Link
                     href="/api/auth/signout"
-                    className="inline-flex items-center justify-center rounded-full border border-sky-500/20 px-5 py-2 text-sm font-semibold text-sky-200 transition hover:border-sky-500/40 hover:bg-sky-500/10"
+                    className="inline-flex items-center justify-center rounded-full border border-slate-700 px-5 py-2 font-semibold text-sky-200 transition hover:border-slate-500 hover:text-white"
                   >
                     Sign out
                   </Link>
+                  {isAuthorized && (
+                    <ChangePasswordButton mustChangePassword={authorizedUser?.mustChangePassword ?? false} />
+                  )}
                 </>
               ) : (
                 <>

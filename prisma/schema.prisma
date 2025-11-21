@@ -56,6 +56,7 @@ model User {
   role          UserRole  @default(USER)
   accounts      Account[]
   sessions      Session[]
+  auditLogs     AuditLog[]
 }
 
 model VerificationToken {
@@ -69,6 +70,7 @@ model VerificationToken {
 model Template {
   id        String   @id @default(cuid())
   name      String   @unique
+  subject   String?
   body      String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -78,10 +80,18 @@ model AuthorizedUser {
   id                 String   @id @default(cuid())
   email              String   @unique
   passwordHash       String
-  role               UserRole @default(USER)
   mustChangePassword Boolean  @default(true)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  userId      String?
+  userEmail   String?
+  description String
+  createdAt   DateTime @default(now())
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
 }
 
 model EmailLog {

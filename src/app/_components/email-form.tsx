@@ -1,16 +1,16 @@
-
 "use client";
 
 import Image from "next/image";
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
+import { EmailAddressField } from "~/app/_components/email-address-field";
 import { api } from "~/trpc/react";
 import type { RouterInputs, RouterOutputs } from "~/trpc/react";
 
-const DOMAIN_SUGGESTIONS = ["gmail.com", "nmamit.in", "nitte.edu.in"] as const;
 const MAX_ATTACHMENT_SIZE = 5 * 1024 * 1024; // 5 MB
 const MAX_ATTACHMENTS = 5;
 const MIN_BODY_HEIGHT = 220;
+const REQUIRED_REPLY_TO = "incridea@nmamit.in";
 
 type AttachmentPayload = {
   name: string;
@@ -22,150 +22,24 @@ type AttachmentPayload = {
 type TemplateOption = RouterOutputs["templates"]["list"][number];
 type EmailSendPayload = Omit<RouterInputs["email"]["send"], "password">;
 
-const isValidEmail = (value: string) => /[^\s@]+@[^\s@]+\.[^\s@]+/.test(value);
-
-type EmailAddressFieldProps = {
-  label: string;
-  addresses: string[];
-  onChange: (value: string[]) => void;
-  placeholder?: string;
+const dedupeEmails = (values: string[]) => {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const value of values) {
+    const trimmed = value.trim();
+    if (!trimmed) continue;
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(trimmed);
+  }
+  return result;
 };
 
-const EmailAddressField = ({ label, addresses, onChange, placeholder }: EmailAddressFieldProps) => {
-  const [inputValue, setInputValue] = useState("");
-  const [localError, setLocalError] = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const atIndex = inputValue.lastIndexOf("@");
-  const domainFragment = atIndex >= 0 ? inputValue.slice(atIndex + 1).toLowerCase() : "";
-
-  const filteredSuggestions = useMemo(
-    () =>
-      DOMAIN_SUGGESTIONS.filter((domain) =>
-        domainFragment.length === 0 ? true : domain.toLowerCase().startsWith(domainFragment),
-      ),
-    [domainFragment],
-  );
-
-  const shouldShowSuggestions = atIndex >= 0 && filteredSuggestions.length > 0;
-
-  const addAddress = (raw: string) => {
-    const trimmed = raw.trim();
-    if (!trimmed) return;
-    if (!isValidEmail(trimmed)) {
-      setLocalError("Enter a valid email address.");
-      return;
-    }
-    if (addresses.includes(trimmed)) {
-      setInputValue("");
-      setLocalError(null);
-      return;
-    }
-    setLocalError(null);
-    onChange([...addresses, trimmed]);
-    setInputValue("");
-  };
-
-  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    const shouldCommit =
-      event.key === "Enter" ||
-      event.key === "," ||
-      event.key === "Tab" ||
-      event.key === " " ||
-      event.key === "Spacebar";
-
-    if (shouldCommit && inputValue.trim()) {
-      event.preventDefault();
-      addAddress(inputValue);
-      return;
-    }
-
-    if (event.key === "Backspace" && inputValue.length === 0 && addresses.length > 0) {
-      event.preventDefault();
-      const next = [...addresses];
-      const restored = next.pop();
-      if (restored) {
-        onChange(next);
-        setInputValue(restored);
-      }
-    }
-  };
-
-  const handleSuggestion = (domain: string) => {
-    const nextValue = `${inputValue.slice(0, atIndex + 1)}${domain}`;
-    setInputValue(nextValue);
-    setLocalError(null);
-    inputRef.current?.focus();
-  };
-
-  const handleRemove = (index: number) => {
-    const next = addresses.filter((_, idx) => idx !== index);
-    onChange(next);
-  };
-
-  const handleWrapperClick = () => {
-    inputRef.current?.focus();
-  };
-
-  return (
-    <div className="flex flex-col gap-2">
-      <label className="text-sm font-medium text-slate-100">{label}</label>
-      <div
-        className="flex min-h-[42px] flex-wrap gap-2 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-1 text-sm text-slate-100 focus-within:border-sky-500 focus-within:ring-2 focus-within:ring-sky-500/40"
-        onClick={handleWrapperClick}
-      >
-        {addresses.map((email, index) => (
-          <span
-            key={`${email}-${index}`}
-            className="inline-flex items-center gap-2 rounded-full bg-slate-800 px-3 py-1 text-xs font-medium text-slate-100"
-          >
-            {email}
-            <button
-              type="button"
-              aria-label={`Remove ${email}`}
-              className="text-slate-400 transition hover:text-white"
-              onClick={() => handleRemove(index)}
-            >
-              &times;
-            </button>
-          </span>
-        ))}
-        <input
-          ref={inputRef}
-          value={inputValue}
-          onChange={(event) => {
-            setInputValue(event.target.value);
-            if (localError) setLocalError(null);
-          }}
-          onKeyDown={handleKeyDown}
-          onBlur={() => {
-            addAddress(inputValue);
-          }}
-          placeholder={addresses.length === 0 ? placeholder : undefined}
-          className="flex-1 min-w-[120px] bg-transparent py-1 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none"
-          type="text"
-          autoComplete="off"
-          spellCheck={false}
-        />
-      </div>
-      {shouldShowSuggestions && (
-        <div className="flex flex-wrap gap-2">
-          {filteredSuggestions.map((domain) => (
-            <button
-              key={domain}
-              type="button"
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => handleSuggestion(domain)}
-              className="rounded-full border border-sky-500/20 bg-sky-500/10 px-3 py-1 text-xs font-medium text-sky-200 transition hover:border-sky-400/40 hover:bg-sky-500/20 hover:text-sky-100"
-            >
-              @{domain}
-            </button>
-          ))}
-        </div>
-      )}
-      {localError && <p className="text-xs text-rose-400">{localError}</p>}
-    </div>
-  );
+const ensureRequiredReplyTo = (values: string[]) => {
+  const normalized = dedupeEmails(values);
+  const hasRequired = normalized.some((entry) => entry.toLowerCase() === REQUIRED_REPLY_TO.toLowerCase());
+  return hasRequired ? normalized : [REQUIRED_REPLY_TO, ...normalized];
 };
 
 type EmailFormProps = {
@@ -174,11 +48,17 @@ type EmailFormProps = {
 };
 
 export const EmailForm = ({ defaultBody, defaultSubject }: EmailFormProps) => {
-  const [subject, setSubject] = useState(defaultSubject ?? "Important Update from Incridea");
+  const initialSubjectValue = useMemo(
+    () => defaultSubject ?? "",
+    [defaultSubject],
+  );
+  const initialBodyValue = useMemo(() => defaultBody ?? "", [defaultBody]);
+  const [subject, setSubject] = useState(initialSubjectValue);
   const [to, setTo] = useState<string[]>([]);
   const [cc, setCc] = useState<string[]>([]);
   const [bcc, setBcc] = useState<string[]>([]);
-  const [body, setBody] = useState(defaultBody ?? "");
+  const [replyTo, setReplyTo] = useState<string[]>(() => ensureRequiredReplyTo([REQUIRED_REPLY_TO]));
+  const [body, setBody] = useState(initialBodyValue);
   const [feedback, setFeedback] = useState<null | { type: "success" | "error"; text: string }>(
     null,
   );
@@ -199,6 +79,7 @@ export const EmailForm = ({ defaultBody, defaultSubject }: EmailFormProps) => {
   const templates = templatesQuery.data ?? [];
   const mustChangePassword = authorizedUserQuery.data?.mustChangePassword ?? false;
   const [recipientResetKey, setRecipientResetKey] = useState({ to: 0, cc: 0, bcc: 0 });
+  const [sentPreview, setSentPreview] = useState<EmailSendPayload | null>(null);
 
   useEffect(() => {
     const element = bodyRef.current;
@@ -207,6 +88,10 @@ export const EmailForm = ({ defaultBody, defaultSubject }: EmailFormProps) => {
     const nextHeight = Math.max(element.scrollHeight, MIN_BODY_HEIGHT);
     element.style.height = `${nextHeight}px`;
   }, [body]);
+
+  useEffect(() => {
+    setReplyTo((prev) => ensureRequiredReplyTo([...prev, ...cc]));
+  }, [cc]);
 
   const readFileAsDataUrl = (file: File) =>
     new Promise<string>((resolve, reject) => {
@@ -276,20 +161,29 @@ export const EmailForm = ({ defaultBody, defaultSubject }: EmailFormProps) => {
     setSelectedTemplateId(templateId);
     if (!templateId) {
       setBody("");
+      setSubject("");
       return;
     }
     const template = templatesQuery.data?.find((item: TemplateOption) => item.id === templateId);
     if (template) {
       setBody(template.body);
+      setSubject(template.subject ?? "");
+    } else {
+      setSubject("");
     }
   };
 
   const resetComposerAfterSend = () => {
+    setSubject(initialSubjectValue);
+    setBody(initialBodyValue);
+    setSelectedTemplateId("");
     setTo([]);
     setCc([]);
     setBcc([]);
+    setReplyTo(ensureRequiredReplyTo([REQUIRED_REPLY_TO]));
     setAttachments([]);
     setAttachmentError(null);
+    setFeedback(null);
     setRecipientResetKey((prev) => ({
       to: prev.to + 1,
       cc: prev.cc + 1,
@@ -298,6 +192,11 @@ export const EmailForm = ({ defaultBody, defaultSubject }: EmailFormProps) => {
     if (attachmentInputRef.current) {
       attachmentInputRef.current.value = "";
     }
+  };
+
+  const handleSentPreviewClose = () => {
+    resetComposerAfterSend();
+    setSentPreview(null);
   };
 
   const closePasswordPrompt = () => {
@@ -317,12 +216,15 @@ export const EmailForm = ({ defaultBody, defaultSubject }: EmailFormProps) => {
       return;
     }
 
+    const replyToList = ensureRequiredReplyTo([...replyTo, ...cc]);
+
     const payload: EmailSendPayload = {
       subject,
       body,
       to,
       cc: cc.length > 0 ? cc : undefined,
       bcc: bcc.length > 0 ? bcc : undefined,
+      replyTo: replyToList,
       attachments: attachments.length > 0 ? attachments : undefined,
     };
 
@@ -346,8 +248,8 @@ export const EmailForm = ({ defaultBody, defaultSubject }: EmailFormProps) => {
         ...pendingPayload,
         password: passwordValue,
       });
-      setFeedback({ type: "success", text: "Email sent successfully." });
-      resetComposerAfterSend();
+      setSentPreview(pendingPayload);
+      setFeedback(null);
       closePasswordPrompt();
     } catch (error) {
       console.error("Failed to send email", error);
@@ -386,7 +288,7 @@ export const EmailForm = ({ defaultBody, defaultSubject }: EmailFormProps) => {
 
         {mustChangePassword && (
           <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-50">
-            You are still using a temporary password. Update it from the admin page after sending.
+            You are still using a temporary password. Use the Change Password button near the Sign out link to update it.
           </div>
         )}
         <div className="flex flex-col gap-2">
@@ -410,7 +312,7 @@ export const EmailForm = ({ defaultBody, defaultSubject }: EmailFormProps) => {
                 ? "Loading templates…"
                 : templates.length === 0
                   ? "No templates available yet."
-                  : "Selecting a template will replace the current body content."}
+                  : "Selecting a template will replace the current body and subject."}
             </span>
             {templates.length > 0 && (
               <button
@@ -448,6 +350,14 @@ export const EmailForm = ({ defaultBody, defaultSubject }: EmailFormProps) => {
           onChange={setBcc}
           placeholder="Add BCC recipients"
         />
+
+        <EmailAddressField
+          label="Reply-To"
+          addresses={replyTo}
+          onChange={(value) => setReplyTo(ensureRequiredReplyTo(value))}
+          placeholder="Reply address"
+        />
+        <p className="text-xs text-slate-500">Always includes incridea@nmamit.in and any CC recipients.</p>
 
         
 
@@ -578,6 +488,10 @@ export const EmailForm = ({ defaultBody, defaultSubject }: EmailFormProps) => {
           </div>
         </div>
       )}
+
+      {sentPreview && (
+        <SentEmailModal payload={sentPreview} onClose={handleSentPreviewClose} />
+      )}
     </div>
   );
 };
@@ -586,33 +500,52 @@ type EmailPreviewProps = {
   subject: string;
   body: string;
   attachments: AttachmentPayload[];
+  variant?: "default" | "compact";
 };
 
-const EmailPreview = ({ subject, body, attachments }: EmailPreviewProps) => {
+const EmailPreview = ({ subject, body, attachments, variant = "default" }: EmailPreviewProps) => {
   const lines = body.split(/\r?\n/);
   const hasBody = lines.some((line) => line.trim().length > 0);
+  const containerClasses =
+    variant === "compact"
+      ? "mx-auto max-w-xl gap-4 p-5 text-sm"
+      : "mx-auto h-full w-full max-w-3xl gap-6 p-8";
+  const subjectPadding = variant === "compact" ? "p-3.5" : "p-5";
+  const logoWrapperPadding = variant === "compact" ? "p-4" : "p-6";
+  const logoSize = variant === "compact" ? 72 : 120;
+  const bodyPadding = variant === "compact" ? "px-4 py-5" : "px-7 py-8";
+  const attachmentsPadding = variant === "compact" ? "p-3.5" : "p-5";
+  const subjectFontClass = variant === "compact" ? "text-base" : "text-lg";
+  const bodyTextClass = variant === "compact" ? "text-[13px]" : "text-sm";
+  const attachmentMetaClass = variant === "compact" ? "text-[11px]" : "text-xs";
 
   return (
-    <div className="flex h-full flex-col gap-6 rounded-2xl border border-slate-800 bg-slate-950/60 p-8 shadow-2xl shadow-sky-950/30 backdrop-blur">
+    <div
+      className={`flex flex-col rounded-2xl border border-slate-800 bg-slate-950/60 shadow-2xl shadow-sky-950/30 backdrop-blur ${containerClasses}`}
+    >
       <div className="flex flex-col gap-4">
-        <div className="rounded-2xl border border-slate-800/60 bg-slate-950/80 p-5">
+        <div className={`rounded-2xl border border-slate-800/60 bg-slate-950/80 ${subjectPadding}`}>
           <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">Subject</p>
-          <p className="mt-1 text-base font-medium text-slate-50">{subject || "Untitled message"}</p>
+          <p className={`mt-1 font-medium text-slate-50 ${subjectFontClass}`}>
+            {subject || "Untitled message"}
+          </p>
         </div>
 
         <div className="overflow-hidden rounded-3xl border border-slate-800/60 bg-slate-950/80">
-          <div className="flex flex-col items-center gap-3 bg-transparent p-6 text-center">
-              <Image
-                src="https://idtisg3yhk.ufs.sh/f/EfXdVhpoNtwlAtbnqEeXiCHRSzQv8DJPLwYBfc0lb2jqhnAk"
-                alt="Incridea logo"
-                width={120}
-                height={120}
-                className="p-2 shadow-xl shadow-slate-900/40"
-                style={{ height: 120, width: "auto" }}
-              />
+          <div
+            className={`flex flex-col items-center gap-3 bg-linear-to-br from-slate-950 via-slate-900 to-slate-800 text-center text-white ${logoWrapperPadding}`}
+          >
+            <Image
+              src="https://idtisg3yhk.ufs.sh/f/EfXdVhpoNtwlAtbnqEeXiCHRSzQv8DJPLwYBfc0lb2jqhnAk"
+              alt="Incridea logo"
+                width={logoSize}
+                height={logoSize}
+              className="p-2 shadow-xl shadow-slate-900/40"
+                style={{ height: logoSize, width: "auto" }}
+            />
           </div>
 
-          <div className="space-y-3 bg-slate-50 px-7 py-8 text-sm leading-relaxed text-slate-700">
+          <div className={`space-y-3 bg-slate-50 leading-relaxed text-slate-700 ${bodyPadding} ${bodyTextClass}`}>
             {hasBody ? (
               lines.map((line, index) =>
                 line.trim().length === 0 ? (
@@ -628,18 +561,76 @@ const EmailPreview = ({ subject, body, attachments }: EmailPreviewProps) => {
         </div>
 
         {attachments.length > 0 && (
-          <div className="rounded-2xl border border-slate-800/60 bg-slate-950/80 p-5 text-sm text-slate-100">
+          <div
+            className={`rounded-2xl border border-slate-800/60 bg-slate-950/80 text-sm text-slate-100 ${attachmentsPadding}`}
+          >
             <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">Attachments</p>
             <ul className="mt-2 space-y-2">
               {attachments.map((file, index) => (
                 <li key={`${file.name}-${index}`} className="flex items-center justify-between">
                   <span className="font-medium">{file.name}</span>
-                  <span className="text-xs text-slate-400">{formatBytes(file.size)}</span>
+                  <span className={`${attachmentMetaClass} text-slate-400`}>{formatBytes(file.size)}</span>
                 </li>
               ))}
             </ul>
           </div>
         )}
+      </div>
+    </div>
+  );
+};
+
+type SentEmailModalProps = {
+  payload: EmailSendPayload;
+  onClose: () => void;
+};
+
+const SentEmailModal = ({ payload, onClose }: SentEmailModalProps) => {
+  const { subject, body, attachments, to, cc, bcc, replyTo } = payload;
+  const recipientGroups = [
+    { label: "To", value: to },
+    { label: "CC", value: cc },
+    { label: "BCC", value: bcc },
+    { label: "Reply-To", value: replyTo },
+  ];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/95 px-4 py-6 text-white backdrop-blur">
+      <div className="w-full max-w-3xl space-y-5 rounded-3xl border border-slate-800 bg-slate-950/80 p-5 shadow-2xl shadow-slate-950/60">
+        <div className="flex flex-col gap-1 text-center">
+          <p className="text-sm font-semibold text-emerald-300">Email sent successfully</p>
+          <h3 className="text-2xl font-semibold text-white">Delivery preview</h3>
+          <p className="text-sm text-slate-400">Review the exact message that was delivered.</p>
+        </div>
+
+        <div className="space-y-2 rounded-2xl border border-slate-800 bg-slate-900/60 p-4 text-sm">
+          {recipientGroups.some((group) => group.value && group.value.length > 0) ? (
+            recipientGroups.map((group) =>
+              group.value && group.value.length > 0 ? (
+                <div key={group.label} className="flex flex-col gap-1 sm:flex-row sm:items-start">
+                  <span className="w-16 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    {group.label}
+                  </span>
+                  <span className="flex-1 text-slate-100">{group.value.join(", ")}</span>
+                </div>
+              ) : null,
+            )
+          ) : (
+            <p className="text-slate-400">Recipient information unavailable.</p>
+          )}
+        </div>
+
+        <EmailPreview subject={subject} body={body} attachments={attachments ?? []} variant="compact" />
+
+        <div className="flex justify-end gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg border border-slate-600 px-5 py-2 text-sm font-semibold text-slate-100 transition hover:border-slate-400"
+          >
+            Close &amp; clear
+          </button>
+        </div>
       </div>
     </div>
   );

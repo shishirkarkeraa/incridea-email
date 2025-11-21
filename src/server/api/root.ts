@@ -1,3 +1,4 @@
+import { auditRouter } from "~/server/api/routers/audit";
 import { authorizedUsersRouter } from "~/server/api/routers/authorized-users";
 import { emailRouter } from "~/server/api/routers/email";
 import { templatesRouter } from "~/server/api/routers/templates";
@@ -12,6 +13,7 @@ export const appRouter = createTRPCRouter({
   email: emailRouter,
   templates: templatesRouter,
   authorizedUsers: authorizedUsersRouter,
+  audit: auditRouter,
 });
 
 // export type definition of API

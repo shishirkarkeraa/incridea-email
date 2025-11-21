@@ -23,8 +23,5 @@ export const requireAdminUser = async (ctx: TRPCContext): Promise<void> => {
     return;
   }
 
-  const record = await requireAuthorizedUser(ctx);
-  if (record.role !== "ADMIN") {
-    throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required." });
-  }
+  throw new TRPCError({ code: "FORBIDDEN", message: "Admin access required." });
 };

@@ -5,10 +5,13 @@ import { requireAdminUser, requireAuthorizedUser } from "~/server/api/utils/auth
 
 export const templatesRouter = createTRPCRouter({
   list: protectedProcedure.query(async ({ ctx }) => {
-    await requireAuthorizedUser(ctx);
+    // Allow admins to manage templates even if they are not part of the authorized senders table.
+    if (ctx.session.user.role !== "ADMIN") {
+      await requireAuthorizedUser(ctx);
+    }
     const templates = await ctx.db.template.findMany({
       orderBy: { name: "asc" },
-      select: { id: true, name: true, body: true, updatedAt: true },
+      select: { id: true, name: true, subject: true, body: true, updatedAt: true },
     });
 
     return templates;
@@ -18,14 +21,17 @@ export const templatesRouter = createTRPCRouter({
     .input(
       z.object({
         name: z.string().min(3).max(80),
+        subject: z.string().max(120).optional(),
         body: z.string().min(1).max(5000),
       }),
     )
     .mutation(async ({ ctx, input }) => {
       await requireAdminUser(ctx);
+      const normalizedSubject = input.subject?.trim();
       const template = await ctx.db.template.create({
         data: {
           name: input.name,
+          subject: normalizedSubject ? normalizedSubject : null,
           body: input.body,
         },
       });
@@ -37,15 +43,18 @@ export const templatesRouter = createTRPCRouter({
       z.object({
         id: z.string().min(1),
         name: z.string().min(3).max(80),
+        subject: z.string().max(120).optional(),
         body: z.string().min(1).max(5000),
       }),
     )
     .mutation(async ({ ctx, input }) => {
       await requireAdminUser(ctx);
+      const normalizedSubject = input.subject?.trim();
       const template = await ctx.db.template.update({
         where: { id: input.id },
         data: {
           name: input.name,
+          subject: normalizedSubject ? normalizedSubject : null,
           body: input.body,
         },
       });

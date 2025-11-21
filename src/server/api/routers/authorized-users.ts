@@ -3,12 +3,21 @@ import { TRPCError } from "@trpc/server";
 import { compare, hash } from "bcryptjs";
 import { z } from "zod";
 
-import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
+import { createTRPCRouter, protectedProcedure, type TRPCContext } from "~/server/api/trpc";
 import { requireAdminUser, requireAuthorizedUser } from "~/server/api/utils/authorization";
 
 const passwordSchema = z.string().min(8, "Password must be at least 8 characters.").max(128);
-const ROLE_VALUES = ["USER", "ADMIN"] as const;
-const roleSchema = z.enum(ROLE_VALUES);
+
+const recordAuditLog = async (ctx: TRPCContext, description: string) => {
+  const sessionUser = ctx.session?.user;
+  await ctx.db.auditLog.create({
+    data: {
+      description,
+      userId: sessionUser?.id ?? null,
+      userEmail: sessionUser?.email ?? null,
+    },
+  });
+};
 
 export const authorizedUsersRouter = createTRPCRouter({
   current: protectedProcedure.query(async ({ ctx }) => {
@@ -16,7 +25,6 @@ export const authorizedUsersRouter = createTRPCRouter({
     return {
       id: record.id,
       email: record.email,
-      role: record.role,
       mustChangePassword: record.mustChangePassword,
     };
   }),
@@ -41,6 +49,7 @@ export const authorizedUsersRouter = createTRPCRouter({
         data: { passwordHash: hashValue, mustChangePassword: false },
       });
 
+      await recordAuditLog(ctx, `Changed password for ${record.email}`);
       return { success: true };
     }),
 
@@ -48,7 +57,7 @@ export const authorizedUsersRouter = createTRPCRouter({
     await requireAdminUser(ctx);
     const users = await ctx.db.authorizedUser.findMany({
       orderBy: { email: "asc" },
-      select: { id: true, email: true, role: true, mustChangePassword: true, createdAt: true },
+      select: { id: true, email: true, mustChangePassword: true, createdAt: true },
     });
     return users;
   }),
@@ -56,31 +65,45 @@ export const authorizedUsersRouter = createTRPCRouter({
   create: protectedProcedure
     .input(
       z.object({
-        email: z.string().email(),
-        password: passwordSchema,
-        role: roleSchema.optional().default("USER"),
+        emails: z.array(z.string().email()).min(1).max(100),
       }),
     )
     .mutation(async ({ ctx, input }) => {
       await requireAdminUser(ctx);
-      const hashValue = await hash(input.password, 12);
+      const normalizedEmails = Array.from(
+        new Set(
+          input.emails
+            .map((email) => email.trim().toLowerCase())
+            .filter((email) => email.length > 0),
+        ),
+      );
 
-      const existing = await ctx.db.authorizedUser.findUnique({ where: { email: input.email } });
-      if (existing) {
-        throw new TRPCError({ code: "CONFLICT", message: "Email is already authorized." });
+      if (normalizedEmails.length === 0) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "No valid email addresses provided." });
       }
 
-      const created = await ctx.db.authorizedUser.create({
-        data: {
-          email: input.email,
-          passwordHash: hashValue,
-          role: input.role ?? "USER",
-          mustChangePassword: true,
-        },
-        select: { id: true, email: true, role: true, mustChangePassword: true },
-      });
+      const results: { email: string; status: "created" | "duplicate" }[] = [];
 
-      return created;
+      for (const email of normalizedEmails) {
+        const existing = await ctx.db.authorizedUser.findUnique({ where: { email } });
+        if (existing) {
+          results.push({ email, status: "duplicate" });
+          continue;
+        }
+
+        const hashValue = await hash(email, 12);
+        await ctx.db.authorizedUser.create({
+          data: {
+            email,
+            passwordHash: hashValue,
+            mustChangePassword: true,
+          },
+        });
+        await recordAuditLog(ctx, `Added authorized user ${email}`);
+        results.push({ email, status: "created" });
+      }
+
+      return { results };
     }),
 
   resetPassword: protectedProcedure
@@ -93,10 +116,12 @@ export const authorizedUsersRouter = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       await requireAdminUser(ctx);
       const hashValue = await hash(input.password, 12);
-      await ctx.db.authorizedUser.update({
+      const updated = await ctx.db.authorizedUser.update({
         where: { id: input.id },
         data: { passwordHash: hashValue, mustChangePassword: true },
+        select: { email: true },
       });
+      await recordAuditLog(ctx, `Reset password for authorized user ${updated.email}`);
       return { success: true };
     }),
 
@@ -104,7 +129,11 @@ export const authorizedUsersRouter = createTRPCRouter({
     .input(z.object({ id: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
       await requireAdminUser(ctx);
-      await ctx.db.authorizedUser.delete({ where: { id: input.id } });
+      const removed = await ctx.db.authorizedUser.delete({
+        where: { id: input.id },
+        select: { email: true },
+      });
+      await recordAuditLog(ctx, `Removed authorized user ${removed.email}`);
       return { success: true };
     }),
 });

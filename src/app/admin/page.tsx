@@ -3,10 +3,6 @@ import { redirect } from "next/navigation";
 
 import { AdminDashboard } from "~/app/admin/_components/admin-dashboard";
 import { auth } from "~/server/auth";
-import {
-  getAuthorizedUserByEmail,
-  type AuthorizedUserSummary,
-} from "~/server/services/authorized-user";
 
 export default async function AdminPage() {
   const session = await auth();
@@ -14,33 +10,12 @@ export default async function AdminPage() {
     redirect("/api/auth/signin");
   }
 
-  let authorizedUser: AuthorizedUserSummary | null = null;
-  if (session.user?.email) {
-    authorizedUser = await getAuthorizedUserByEmail(session.user.email);
-  }
-
-  if (!authorizedUser) {
-    return (
-      <main className="min-h-screen bg-slate-950 pb-24 pt-24 text-slate-100">
-        <div className="mx-auto flex w-full max-w-4xl flex-col items-center gap-6 px-6 text-center">
-          <h1 className="text-3xl font-bold">Admin Access Required</h1>
-          <p className="text-sm text-slate-400">
-            Your account is not on the authorized senders list. Contact an administrator to request access.
-          </p>
-          <Link href="/" className="text-sky-400 hover:text-sky-200">
-            Return to the mailer
-          </Link>
-        </div>
-      </main>
-    );
-  }
-
-  if (authorizedUser.role !== "ADMIN") {
+  if (session.user.role !== "ADMIN") {
     return (
       <main className="min-h-screen bg-slate-950 pb-24 pt-24 text-slate-100">
         <div className="mx-auto flex w-full max-w-4xl flex-col items-center gap-6 px-6 text-center">
           <h1 className="text-3xl font-bold">Restricted Area</h1>
-          <p className="text-sm text-slate-400">Only administrators can view this page.</p>
+          <p className="text-sm text-slate-400">Only administrator accounts may view this page.</p>
           <Link href="/" className="text-sky-400 hover:text-sky-200">
             Return to the mailer
           </Link>
@@ -57,7 +32,7 @@ export default async function AdminPage() {
           <h1 className="mt-3 text-4xl font-bold text-white">Incridea Email Operations</h1>
           <p className="mt-2 text-sm text-slate-300">Review email activity, manage templates, and control which users can send mail.</p>
           <div className="mt-4 text-xs text-slate-400">
-            Signed in as {session.user.email} · Role: {authorizedUser.role}
+            Signed in as {session.user.email} · Role: {session.user.role}
           </div>
         </header>
 

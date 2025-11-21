@@ -32,6 +32,21 @@ const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024; // 5 MB
 
 const LOGO_URL = "https://idtisg3yhk.ufs.sh/f/EfXdVhpoNtwlAtbnqEeXiCHRSzQv8DJPLwYBfc0lb2jqhnAk";
 
+const dedupeEmails = (values: Array<string | null | undefined>) => {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const value of values) {
+    if (!value) continue;
+    const trimmed = value.trim();
+    if (!trimmed) continue;
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(trimmed);
+  }
+  return result;
+};
+
 const escapeHtml = (value: string) =>
   value
     .replace(/&/g, "&amp;")
@@ -48,15 +63,16 @@ const renderEmailHtml = (body: string) => {
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
   </head>
-  <body style="margin: 0; padding: 0; background-color: #f1f5f9; font-family: 'Segoe UI', Arial, sans-serif; color: #0f172a;">
-    <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f1f5f9; padding: 40px 0;">
+  <body style="margin: 0; padding: 0; font-family: 'Segoe UI', Arial, sans-serif; color: #0f172a;">
+    <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="padding: 40px 0;">
       <tr>
         <td align="center">
           <table role="presentation" cellpadding="0" cellspacing="0" width="600" style="background-color: #ffffff; border-radius: 24px; overflow: hidden; box-shadow: 0 20px 45px rgba(15, 23, 42, 0.12);">
             <tr>
-              <td align="center" style="padding: 32px 24px;">
-                <img src="${LOGO_URL}" alt="Incridea" height="72" style="display: block; border: 0; height: 96px; width: auto;" />
-
+              <td style="padding: 0;">
+                <div style="background: linear-gradient(135deg, #020617, #0f172a); padding: 40px 32px; text-align: center;">
+                  <img src="${LOGO_URL}" alt="Incridea" height="72" style="display: inline-block; border: 0; height: 96px; width: auto;" />
+                </div>
               </td>
             </tr>
             <tr>
@@ -96,6 +112,7 @@ export const emailRouter = createTRPCRouter({
         subject: z.string().min(1, "Subject is required").max(120),
         body: z.string().min(1, "Body cannot be empty").max(5000),
         attachments: z.array(attachmentSchema).max(5).optional(),
+        replyTo: z.array(z.string().email()).optional(),
         password: z.string().min(1, "Password is required").max(128),
       }),
     )
@@ -122,6 +139,13 @@ export const emailRouter = createTRPCRouter({
 
       const fromName = env.EMAIL_FROM_NAME ?? ctx.session.user.name ?? "Incridea Mailer";
 
+      const replyToList = dedupeEmails([
+        env.EMAIL_FROM_ADDRESS,
+        ctx.session.user.email,
+        ...(input.replyTo ?? []),
+        ...(cc ?? []),
+      ]);
+
       await transporter.sendMail({
         from: {
           name: fromName,
@@ -132,7 +156,7 @@ export const emailRouter = createTRPCRouter({
         bcc: bcc && bcc.length > 0 ? bcc.join(",") : undefined,
         subject,
         html,
-        replyTo: ctx.session.user.email ?? env.EMAIL_FROM_ADDRESS,
+        replyTo: replyToList.join(","),
         attachments,
       });
 
