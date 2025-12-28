@@ -1,42 +1,53 @@
-  {
-    "compilerOptions": {
-      /* Base Options: */
-      "esModuleInterop": true,
-      "skipLibCheck": true,
-      "target": "es2022",
-      "allowJs": true,
-      "resolveJsonModule": true,
-      "moduleDetection": "force",
-      "isolatedModules": true,
-      "verbatimModuleSyntax": true,
-      /* Strictness */
-      "strict": true,
-      "noUncheckedIndexedAccess": true,
-      "checkJs": true,
-
-      /* Bundled projects */
-      "lib": ["dom", "dom.iterable", "ES2022"],
-      "noEmit": true,
-      "module": "ESNext",
-      "moduleResolution": "Bundler",
-      "jsx": "preserve",
-      "plugins": [{ "name": "next" }],
-      "incremental": true,
-      "allowImportingTsExtensions": true,
-      /* Path Aliases */
-      "paths": {
-        "~/*": ["./src/*"]
+{
+  "compilerOptions": {
+    /* Base Options: */
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "target": "es2022",
+    "allowJs": true,
+    "resolveJsonModule": true,
+    "moduleDetection": "force",
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    /* Strictness */
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "checkJs": true,
+    /* Bundled projects */
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "ES2022"
+    ],
+    "noEmit": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "plugins": [
+      {
+        "name": "next"
       }
-    },
-    "include": [
-      "next-env.d.ts",
-      "src/**/*",
-      ".next/types/**/*.ts",
-      "src/**/*.ts",
-      "src/**/*.tsx",
-      "src/**/*.d.ts",
-      "src",
-    ]
-,
-    "exclude": ["node_modules"]
-  }
+    ],
+    "incremental": true,
+    "allowImportingTsExtensions": true,
+    /* Path Aliases */
+    "paths": {
+      "~/*": [
+        "./src/*"
+      ]
+    }
+  },
+  "include": [
+    "next-env.d.ts",
+    "src/**/*",
+    ".next/types/**/*.ts",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "src/**/*.d.ts",
+    "src",
+    ".next/dev/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}
